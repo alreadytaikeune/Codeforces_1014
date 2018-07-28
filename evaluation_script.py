@@ -32,9 +32,10 @@ for u, c in actions:
     idx_bottles += 1
     idx_cham = chameleons[u]
     new_pos_stripe = idx_cham + 1
-    while stripe[new_pos_stripe] != c and \
+    while stripe[new_pos_stripe % N] != c and \
             new_pos_stripe not in chameleons.values():
         new_pos_stripe += 1
     chameleons[u] = new_pos_stripe
 
 print(min(chameleons))
+print()

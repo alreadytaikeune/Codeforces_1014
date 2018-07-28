@@ -13,6 +13,7 @@ C = 10
 H = 10
 U = 10
 
+LETTERS = list(string.ascii_uppercase)[:H]
 ERROR_FLAG = False
 LOCK = threading.LOCK
 
@@ -33,14 +34,13 @@ def raise_err_flag():
 
 def give_me_a_test():
     out = []
-    out.append("{} {} {} {} {}\n".format(N, S, C, H, U))
-    letters = string.ascii_uppercase
+    out.append("{} {} {} {} {}".format(N, S, C, H, U))
 
-    stripe = np.random.choice(letters, (N,))
-    bottles = np.random.choice(letters, (H+S,))
-    out.append("".join(stripe)+"\n")
-    out.append("".join(bottles)+"\n")
-    return out
+    stripe = np.random.choice(LETTERS, (N,))
+    bottles = np.random.choice(LETTERS, (H+S,))
+    out.append("".join(stripe))
+    out.append("".join(bottles))
+    return "\n".join(out)
 
 
 def get_from_queue(queue):
@@ -93,8 +93,8 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: ./test_script.py script")
     script_name = sys.argv[2]
-    WORKERS = 4
-    RUN_ON_N = 100
+    WORKERS = 2
+    RUN_ON_N = 10
     tests_queue = Queue(100)
     scores_queue = Queue(100)
     threads = []
