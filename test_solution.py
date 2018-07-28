@@ -1,11 +1,11 @@
 #! encoding=utf8
 from __future__ import unicode_literals, print_function, absolute_import
-import sys
 import string
 import threading
 from Queue import Queue, Full, Empty
 from subprocess import Popen, PIPE
 import numpy as np
+from tabulate import tabulate
 
 N = 100000
 S = 10000
@@ -15,7 +15,7 @@ U = 10
 
 LETTERS = list(string.ascii_uppercase)[:H]
 ERROR_FLAG = False
-LOCK = threading.LOCK
+LOCK = threading.Lock()
 
 
 def get_err_flag():
@@ -40,7 +40,7 @@ def give_me_a_test():
     bottles = np.random.choice(LETTERS, (H+S,))
     out.append("".join(stripe))
     out.append("".join(bottles))
-    return "\n".join(out)
+    return "\n".join(out) + "\n"
 
 
 def get_from_queue(queue):
@@ -52,7 +52,7 @@ def get_from_queue(queue):
                 raise RuntimeError("Error flag raised")
 
 
-def put_from_queue(queue, v):
+def put_in_queue(queue, v):
     while True:
         try:
             return queue.put(v, timeout=0.1)
@@ -71,17 +71,18 @@ def run_script_thread(script_name, tests_queue, score_queue):
             score_queue.put(None)
             raise_err_flag()
             raise RuntimeError(
-                "Got error while running script {}".format(stderr))
+                "Got error while running script {}: {}".format(script, stderr))
         return stdout
 
     while True:
         test = get_from_queue(tests_queue)
         if test is None:
             tests_queue.task_done()
+            print("No more test... exiting thread")
             return
         try:
             sol = _run_script(script_name, test)
-            score = _run_script("evaluate_solution.py", test+sol)
+            score = _run_script("evaluation_script.py", test+sol)
             score_queue.put(int(score))
             tests_queue.task_done()
         except Exception as e:
@@ -89,37 +90,60 @@ def run_script_thread(script_name, tests_queue, score_queue):
             raise ValueError("Got unhandled exception {}".format(e))
 
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: ./test_script.py script")
-    script_name = sys.argv[2]
+def run_for_script(script_name):
     WORKERS = 2
     RUN_ON_N = 10
     tests_queue = Queue(100)
     scores_queue = Queue(100)
     threads = []
+    print("Starting {} workers..".format(WORKERS))
     for w in range(WORKERS):
         t = threading.Thread(
-            run_script_thread, args=(script_name, tests_queue, scores_queue))
+            target=run_script_thread,
+            args=(script_name, tests_queue, scores_queue))
         t.daemon = True
         threads.append(t)
         t.start()
+    print("Starting to generate {} tests".format(RUN_ON_N))
     for _ in range(RUN_ON_N):
-        tests_queue.put(give_me_a_test())
-
+        put_in_queue(tests_queue, give_me_a_test())
     for _ in range(WORKERS):
-        tests_queue.put(None)
+        put_in_queue(tests_queue, None)
+    if get_err_flag():
+        exit(1)
+    print("All tests have been sent, waiting for results...")
     for t in threads:
         t.join()
     scores = []
     for i in range(RUN_ON_N):
-        scores.append(scores_queue.get())
+        scores.append(get_from_queue(scores_queue))
         scores_queue.task_done()
 
-    scores = np.array(scores)
-    print("Run results for {}. Based on {} values".format(
-        script_name, RUN_ON_N))
-    print("Average score: {:.2f}".format(np.mean(scores)))
-    print("Best: {}".format(np.max(scores)))
-    print("Worst: {}".format(np.min(scores)))
-    print("Std dev: {:.2f}".format(np.stddev(scores)))
+    return np.array(scores)
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("scripts", nargs='+')
+    args = parser.parse_args()
+    scores = []
+    for sname in args.scripts:
+        print("Running evaluation on script {}".format(sname))
+        s = run_for_script(sname)
+        best = np.max(s)
+        worst = np.min(s)
+        avg = np.mean(s)
+        std = np.std(s)
+        scores.append((sname, best, worst, avg, std))
+        print("Best: {}".format(best))
+        print("Worst: {}".format(worst))
+        print("Std dev: {:.2f}".format(avg))
+        print("Average score: {:.2f}".format(std))
+
+    res = tabulate(
+        scores, ("Name", "Best", "Worst", "Average", "Std dev"),
+        tablefmt="pipe")
+    print(res)
+    with open("Standings.md", "w") as _:
+        _.write(res)
