@@ -91,7 +91,7 @@ def run_script_thread(script_name, tests_queue, score_queue):
 
 
 def run_for_script(script_name):
-    WORKERS = 2
+    WORKERS = 4
     RUN_ON_N = 10
     tests_queue = Queue(100)
     scores_queue = Queue(100)
@@ -129,6 +129,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     scores = []
     for sname in args.scripts:
+        np.random.seed(0)
         print("Running evaluation on script {}".format(sname))
         s = run_for_script(sname)
         best = np.max(s)
